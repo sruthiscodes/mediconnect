@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  
+  body {
+    @apply text-gray-900 leading-normal;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-700 text-white focus:ring-primary-500;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-100 hover:bg-gray-200 text-gray-900 focus:ring-gray-500;
+  }
+  
+  .btn-emergency {
+    @apply bg-emergency-600 hover:bg-emergency-700 text-white focus:ring-emergency-500;
+  }
+  
+  .btn-urgent {
+    @apply bg-urgent-600 hover:bg-urgent-700 text-white focus:ring-urgent-500;
+  }
+  
+  .card {
+    @apply bg-white rounded-xl shadow-soft border border-gray-100 p-6;
+  }
+  
+  .form-input {
+    @apply block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm;
+  }
+  
+  .form-textarea {
+    @apply block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm resize-none;
+  }
+  
+  .urgency-emergency {
+    @apply bg-emergency-50 text-emergency-700 border-emergency-200;
+  }
+  
+  .urgency-urgent {
+    @apply bg-urgent-50 text-urgent-700 border-urgent-200;
+  }
+  
+  .urgency-primary-care {
+    @apply bg-yellow-50 text-yellow-700 border-yellow-200;
+  }
+  
+  .urgency-telehealth {
+    @apply bg-care-50 text-care-700 border-care-200;
+  }
+  
+  .urgency-self-care {
+    @apply bg-primary-50 text-primary-700 border-primary-200;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+} 
