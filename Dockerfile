@@ -20,11 +20,14 @@ COPY backend/requirements.txt .
 # Install Python dependencies with more memory and timeout
 RUN pip install --no-cache-dir --timeout=1000 -r requirements.txt
 
-# Copy application code
-COPY backend/ .
+# Copy backend application code
+COPY backend/ ./backend/
+
+# Set working directory to backend
+WORKDIR /app/backend
 
 # Expose port
 EXPOSE 8000
 
 # Start command
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"] 
