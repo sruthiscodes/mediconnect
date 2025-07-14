@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies needed for ML packages
+# Install system dependencies needed for basic packages
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
@@ -10,14 +10,10 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Rust (needed for some ML packages)
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
+# Copy minimal requirements first for better caching
+COPY backend/requirements-minimal.txt requirements.txt
 
-# Copy requirements first for better caching
-COPY backend/requirements.txt .
-
-# Install Python dependencies with more memory and timeout
+# Install Python dependencies
 RUN pip install --no-cache-dir --timeout=1000 -r requirements.txt
 
 # Copy backend application code

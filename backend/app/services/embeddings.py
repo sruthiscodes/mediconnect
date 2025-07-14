@@ -1,6 +1,4 @@
-import chromadb
-from chromadb import Documents, EmbeddingFunction, Embeddings
-from sentence_transformers import SentenceTransformer
+import logging
 from typing import List, Dict, Any, Optional
 import uuid
 import asyncio
@@ -8,24 +6,53 @@ from concurrent.futures import ThreadPoolExecutor
 
 from app.core.config import settings
 
-class SentenceTransformerEmbeddingFunction(EmbeddingFunction):
+# Try to import ML dependencies, but make them optional
+ML_AVAILABLE = False
+try:
+    import chromadb
+    from chromadb import Documents, EmbeddingFunction, Embeddings
+    from sentence_transformers import SentenceTransformer
+    ML_AVAILABLE = True
+except ImportError:
+    logging.warning("ML dependencies (chromadb, sentence-transformers) not available. RAG features will be disabled.")
+
+class SentenceTransformerEmbeddingFunction:
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
-        self.model = SentenceTransformer(model_name)
+        if ML_AVAILABLE:
+            self.model = SentenceTransformer(model_name)
+        else:
+            self.model = None
 
     def __call__(self, input: Documents) -> Embeddings:
-        return self.model.encode(input).tolist()
+        if self.model:
+            return self.model.encode(input).tolist()
+        else:
+            # Return dummy embeddings
+            return [[0.0] * 384 for _ in input]
 
 class EmbeddingService:
     def __init__(self):
-        self.client = chromadb.PersistentClient(path=settings.chroma_persist_directory)
-        self.embedding_function = SentenceTransformerEmbeddingFunction()
-        self.executor = ThreadPoolExecutor(max_workers=4)
-        
-        # Initialize collections
-        self._initialize_collections()
+        if ML_AVAILABLE:
+            try:
+                self.client = chromadb.PersistentClient(path=settings.chroma_persist_directory)
+                self.embedding_function = SentenceTransformerEmbeddingFunction()
+                self.executor = ThreadPoolExecutor(max_workers=4)
+                self._initialize_collections()
+            except Exception as e:
+                logging.error(f"Failed to initialize ChromaDB: {e}")
+                self.client = None
+                self.embedding_function = None
+                self.executor = None
+        else:
+            self.client = None
+            self.embedding_function = None
+            self.executor = None
 
     def _initialize_collections(self):
         """Initialize ChromaDB collections for user history and clinical knowledge"""
+        if not ML_AVAILABLE or not self.client:
+            return
+            
         try:
             self.user_history_collection = self.client.get_or_create_collection(
                 name="user_history",
@@ -37,10 +64,13 @@ class EmbeddingService:
                 embedding_function=self.embedding_function
             )
         except Exception as e:
-            print(f"Error initializing collections: {e}")
+            logging.error(f"Error initializing collections: {e}")
 
     async def add_user_symptom(self, user_id: str, symptoms: str, metadata: Optional[Dict] = None) -> str:
         """Add user symptom to user_history collection"""
+        if not ML_AVAILABLE or not self.client:
+            return f"user_{user_id}_{uuid.uuid4().hex[:8]}"
+            
         def _add_symptom():
             doc_id = f"user_{user_id}_{uuid.uuid4().hex[:8]}"
             
@@ -62,6 +92,9 @@ class EmbeddingService:
 
     async def add_clinical_guideline(self, guideline_text: str, metadata: Optional[Dict] = None) -> str:
         """Add clinical guideline to clinical_knowledge collection"""
+        if not ML_AVAILABLE or not self.client:
+            return f"clinical_{uuid.uuid4().hex[:8]}"
+            
         def _add_guideline():
             doc_id = f"clinical_{uuid.uuid4().hex[:8]}"
             
@@ -82,6 +115,9 @@ class EmbeddingService:
 
     async def search_user_history(self, user_id: str, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
         """Search user's symptom history"""
+        if not ML_AVAILABLE or not self.client:
+            return []
+            
         def _search():
             results = self.user_history_collection.query(
                 query_texts=[query],
@@ -105,6 +141,9 @@ class EmbeddingService:
 
     async def search_clinical_knowledge(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
         """Search clinical knowledge base"""
+        if not ML_AVAILABLE or not self.client:
+            return []
+            
         def _search():
             results = self.clinical_knowledge_collection.query(
                 query_texts=[query],
@@ -127,6 +166,12 @@ class EmbeddingService:
 
     async def get_rag_context(self, user_id: str, current_symptoms: str) -> Dict[str, List[str]]:
         """Get combined RAG context from user history and clinical knowledge"""
+        if not ML_AVAILABLE:
+            return {
+                "user_history": [],
+                "clinical_knowledge": []
+            }
+            
         user_history_results = await self.search_user_history(user_id, current_symptoms, n_results=2)
         clinical_results = await self.search_clinical_knowledge(current_symptoms, n_results=3)
         
@@ -140,33 +185,43 @@ class EmbeddingService:
 
     async def clear_collection(self, collection_name: str):
         """Clear all documents from a collection"""
+        if not ML_AVAILABLE or not self.client:
+            return
+            
         def _clear():
             if collection_name == "user_history":
                 # Delete and recreate the collection
                 try:
-                    self.client.delete_collection("user_history")
+                    if self.client:
+                        self.client.delete_collection("user_history")
                 except:
                     pass  # Collection might not exist
-                self.user_history_collection = self.client.get_or_create_collection(
-                    name="user_history",
-                    embedding_function=self.embedding_function
-                )
+                if self.client:
+                    self.user_history_collection = self.client.get_or_create_collection(
+                        name="user_history",
+                        embedding_function=self.embedding_function
+                    )
             elif collection_name == "clinical_knowledge":
                 # Delete and recreate the collection
                 try:
-                    self.client.delete_collection("clinical_knowledge")
+                    if self.client:
+                        self.client.delete_collection("clinical_knowledge")
                 except:
                     pass  # Collection might not exist
-                self.clinical_knowledge_collection = self.client.get_or_create_collection(
-                    name="clinical_knowledge",
-                    embedding_function=self.embedding_function
-                )
+                if self.client:
+                    self.clinical_knowledge_collection = self.client.get_or_create_collection(
+                        name="clinical_knowledge",
+                        embedding_function=self.embedding_function
+                    )
 
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(self.executor, _clear)
 
     async def add_documents(self, collection_name: str, documents: List[str], metadatas: List[Dict], ids: List[str]):
         """Add multiple documents to a collection"""
+        if not ML_AVAILABLE or not self.client:
+            return
+            
         def _add_documents():
             if collection_name == "clinical_knowledge":
                 self.clinical_knowledge_collection.add(
